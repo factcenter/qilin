@@ -1,0 +1,208 @@
+apply plugin: 'java'
+apply plugin: 'eclipse'
+apply plugin: 'idea'
+
+// Use old maven plugin; maven-publish has problems with signed POMs
+apply plugin: 'maven'
+apply plugin: 'signing'
+
+// Is this a snapshot version?
+ext { isSnapshot = false } 
+
+description = "The Qilin Crypto SDK: An open-source Java SDK for rapid prototyping of cryptographic protocols"
+
+// Your project version
+version = "1.2.0"
+ext {
+    groupId = 'org.factcenter.qilin'
+    url = 'https://github.com/factcenter/qilin'
+    license = [
+        name: 'MIT License',
+        url: 'http://www.opensource.org/licenses/mit-license.php'
+    ]
+    developers = [
+        [
+            name: 'Tal Moran',
+            email: 'talm@factcenter.org',
+            organization: 'FACT Center',
+            organizationUrl: 'http://factcenter.org/'
+        ]
+    ]
+    scm = [
+        connection: 'scm:https://github.com/factcenter/qilin.git',
+        developerConnection: 'scm:https://github.com/factcenter/qilin.git',
+        url: project.url,
+    ]
+}
+
+
+// Library should generate Java 7-compatible bytecode
+sourceCompatibility = 1.7
+targetCompatibility = 1.7
+
+dependencies {
+    // Crypto
+    compile 'org.bouncycastle:bcprov-jdk15on:1.53'
+
+    // Logging
+    compile 'org.slf4j:slf4j-api:1.7.7'
+    runtime 'ch.qos.logback:logback-classic:1.1.2'
+    runtime 'ch.qos.logback:logback-core:1.1.2'
+
+    testCompile 'junit:junit:4.12'
+
+    runtime 'org.codehaus.groovy:groovy:2.4.5'
+}
+
+
+
+
+
+/*==== You probably don't have to edit below this line =======*/
+
+version += "${isSnapshot ? '-SNAPSHOT' : ''}"
+
+ext {
+    snapshotPublicationRepository = "https://oss.sonatype.org/content/repositories/snapshots/"
+    releasePublicationRepository = "https://oss.sonatype.org/service/local/staging/deploy/maven2/"
+
+    // Credentials for publication repositories (needed only for publishing)
+    // Should be set in ${HOME}/.gradle/gradle.properties
+    ossrhUser =  project.hasProperty('ossrhUser') ? project.property('ossrhUser') : ""
+    osshrPassword = project.hasProperty('osshrPassword') ? project.property('osshrPassword') : ""
+}
+
+// Used to generate initial maven-dir layout
+task "create-dirs" { description = "Create default maven directory structure" } << {
+    sourceSets*.java.srcDirs*.each { it.mkdirs() }
+    sourceSets*.resources.srcDirs*.each { it.mkdirs() }
+}
+
+
+
+/*===============================================
+ *        Jars containing tests, javadoc, sources
+ *===============================================*/
+task testsJar(type: Jar) {
+    classifier 'tests'
+    from sourceSets.test.output
+}
+
+task javadocJar(type: Jar) {
+    classifier = 'javadoc'
+    from javadoc
+}
+
+task sourcesJar(type: Jar) {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+}
+
+
+artifacts {
+    archives javadocJar
+    archives sourcesJar
+    archives testsJar
+}
+
+
+/*===================================
+ *        Repositories
+ *===================================*/
+
+repositories {
+    // Try local repository first
+    mavenLocal()
+
+    // Use 'maven central' for other dependencies.
+    mavenCentral()
+
+    // Sonatype repository (for snapshots and not-yet-synced versions)
+    if (isSnapshot) {
+        maven {
+            url 'https://oss.sonatype.org/content/groups/public'
+        }
+    }
+}
+
+task "info" << {
+        println "Project: ${project.name}"
+println "Description: ${project.description}"
+        println "--------------------------"
+        println "GroupId: $groupId"
+        println "Version: $version (${isSnapshot ? 'snapshot' : 'release'})"
+        println ""
+}
+info.description 'Print some information about project parameters'
+
+
+/*===================================
+ *        Publishing
+ *===================================*/
+if (ossrhUser != "") {
+    uploadArchives {
+        repositories {
+
+            mavenDeployer {
+                beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
+
+                repository(url: releasePublicationRepository) {
+                    authentication(userName: ossrhUser, password: ossrhPassword)
+                }
+
+                snapshotRepository(url: snapshotPublicationRepository) {
+                    authentication(userName: ossrhUser, password: ossrhPassword)
+                }
+
+                pom.project {
+                    name "${project.groupId}:${project.name}"
+                    groupId project.groupId
+                    packaging 'jar'
+                    // optionally artifactId can be defined here
+                    description project.description
+                    url project.url
+
+                    scm {
+                        connection project.scm.connection
+                        developerConnection project.scm.developerConnection
+                        url project.scm.url
+                    }
+
+                    licenses {
+                        license {
+                            name project.license.name
+                            url project.license.url
+                        }
+                    }
+
+                    developers {
+                        project.developers.each { dev  ->
+                            developer {
+                                name dev.name
+                                email dev.email
+                                organization dev.organization
+                                organizationUrl dev.organizationUrl
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+signing {
+    sign configurations.archives
+}
+
+
+gradle.taskGraph.whenReady { taskGraph ->
+    if (taskGraph.allTasks.any { it instanceof Sign }) {
+        if (!project.hasProperty('signing.secretKeyRingFile')) {
+            ext."signing.secretKeyRingFile" = file("${System.properties['user.home']}/.gnupg/secring.gpg")
+            logger.info("Using default GPG keyring: {}", ext."signing.secretKeyRingFile" )
+        }
+    }
+}
+
+

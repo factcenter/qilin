@@ -1,0 +1,17 @@
+build/
+.settings/
+.gradle/
+.idea/
+.classpath
+.project
+*.autosave
+*.ipynb
+*.pyc
+*.iml
+*.iws
+*.ipr
+*.class
+*.log
+*.orig
+*~
+.~*
